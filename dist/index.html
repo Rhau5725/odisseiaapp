@@ -116,6 +116,58 @@
     const bindAppSimpleBase=bindApp;bindApp=function(){bindAppSimpleBase();document.querySelectorAll('[data-action="save-simple-profile-edit"]').forEach(button=>button.addEventListener('click',()=>{const name=document.getElementById('profile-name').value.trim(),motorcycleName=document.getElementById('profile-moto').value.trim();if(!name||!motorcycleName){toast('Informe seu nome e sua moto.');return}state.profile.name=name;state.profile.motorcycleName=motorcycleName;account={...account,name,motorcycleName};save();renderApp();toast('Informações atualizadas.')}))}
     function bootAuth(){const profile=loadSimpleProfile();if(profile?.name&&profile?.motorcycleName){account={id:'local-profile',...profile};state=loadSimpleState();state.profile={...state.profile,...profile};}else{account=null;state=structuredClone(blankState)}render()}
     function logout(){account=null;state=structuredClone(blankState);render()}
+    function ensureProfileMotorcycle(){
+      const model=String(state.profile.motorcycleName||'').trim();
+      if(!model)return false;
+      if(!Array.isArray(state.motorcycles))state.motorcycles=[];
+      const profileBike=state.motorcycles.find(b=>b.fromProfile);
+      if(profileBike){
+        if(profileBike.model!==model){profileBike.model=model;save()}
+        return true
+      }
+      if(state.motorcycles.length)return true;
+      state.motorcycles=[{id:'profile-motorcycle',brand:'',model,year:'',color:'',odometer:0,consumption:0,photo:'',fromProfile:true}];
+      save();
+      return true
+    }
+
+    function showBikeModal(id){
+      const profileBike=!id?state.motorcycles.find(x=>x.fromProfile):null;
+      const b=state.motorcycles.find(x=>x.id===id)||profileBike||{};
+      openModal(`<div class="eyebrow" style="color:#ff9b50">Minha moto</div><h3>${id?'Editar motocicleta':'Cadastrar motocicleta'}</h3><p>Salve apenas dados fornecidos por você.</p><div class="form-grid"><div class="grid two-col"><div class="field"><label>Marca</label><input id="m-brand" value="${escapeHtml(b.brand||'')}"></div><div class="field"><label>Modelo</label><input id="m-model" value="${escapeHtml(b.model||'')}"></div></div><div class="grid three-col"><div class="field"><label>Ano</label><input id="m-year" type="number" value="${escapeHtml(b.year||'')}"></div><div class="field"><label>Cor</label><input id="m-color" value="${escapeHtml(b.color||'')}"></div><div class="field"><label>Quilometragem</label><input id="m-odo" type="number" value="${escapeHtml(b.odometer||'')}"></div></div><div class="field"><label>Consumo médio km/L</label><input id="m-consumption" type="number" step="0.1" value="${escapeHtml(b.consumption||'')}"></div></div><div class="form-actions"><button class="btn secondary" data-close-modal>Cancelar</button><button class="btn" data-save-bike>Salvar</button></div>`);
+      document.querySelector('[data-save-bike]').onclick=()=>{
+        const brand=document.getElementById('m-brand').value.trim(),model=document.getElementById('m-model').value.trim();
+        if(!brand||!model){toast('Informe marca e modelo.');return}
+        const item={id:id||b.id||uid(),brand,model,year:document.getElementById('m-year').value,color:document.getElementById('m-color').value.trim(),odometer:Number(document.getElementById('m-odo').value||0),consumption:Number(document.getElementById('m-consumption').value||0),photo:b.photo||'',fromProfile:false};
+        if(id)state.motorcycles=state.motorcycles.map(x=>x.id===id?item:x);
+        else if(profileBike)state.motorcycles=state.motorcycles.map(x=>x.id===profileBike.id?item:x);
+        else state.motorcycles.push(item);
+        save();closeModal();renderApp();toast('Motocicleta salva.')
+      }
+    }
+
+    function eventsView(){
+      const filters=window.eventFilters||{};
+      const search=String(filters.search||'');
+      const location=String(filters.location||'');
+      const uf=String(filters.state||'');
+      const date=String(filters.date||'');
+      const query=(search+' '+location).trim().toLowerCase();
+      const filtered=state.events.filter(e=>{
+        const hay=[e.name,e.city,e.state,e.address,e.description].filter(Boolean).join(' ').toLowerCase();
+        return (!query||hay.includes(query))&&(!uf||e.state===uf)&&(!date||e.date===date)
+      });
+      const states=['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+      document.getElementById('events').innerHTML=`<div class="hero"><div><div class="eyebrow">Radar de encontros</div><h2>Encontre eventos<br><span style="color:var(--orange)">perto da sua rota.</span></h2><p>Informe uma localização e veja somente eventos reais disponíveis no radar. O usuário não cadastra eventos nesta tela.</p></div><button class="btn secondary" data-action="toggle-alerts">${state.preferences.eventAlerts?'✓ Alertas ativos':'Ativar alertas'}</button></div><article class="card"><div class="card-head"><div><h3>Buscar encontros</h3><p>Pesquise por cidade, região, estado e data.</p></div><span class="badge">BUSCA</span></div><div class="form-grid"><div class="field"><label for="event-location">Localização</label><input id="event-location" value="${escapeHtml(location)}" placeholder="Ex.: Petrópolis, RJ"></div><div class="grid two-col"><div class="field"><label for="event-search">Evento ou cidade</label><input id="event-search" value="${escapeHtml(search)}" placeholder="Ex.: encontro custom"></div><div class="field"><label for="event-state">Estado</label><select id="event-state"><option value="">Todos os estados</option>${states.map(s=>`<option value="${s}" ${uf===s?'selected':''}>${s}</option>`).join('')}</select></div></div><div class="grid two-col"><div class="field"><label for="event-date">Data</label><input id="event-date" type="date" value="${escapeHtml(date)}"></div><button class="btn" data-action="search-events">Buscar eventos</button></div></div></article><div class="grid two-col" style="margin-top:16px"><article class="card">${cardHead('Mapa de encontros','Visualização dos eventos encontrados')}${filtered.length?`<div class="map"><div class="map-empty"><div><h3>${filtered.length} evento${filtered.length===1?'':'s'} encontrado${filtered.length===1?'':'s'}</h3><p>Os detalhes e a localização de cada evento aparecem na agenda abaixo.</p></div></div></div>`:empty('Nenhum evento nesta localização','A busca usa apenas registros reais disponíveis para esta conta.','','◉',true)}</article><article class="card">${cardHead('Agenda','Eventos próximos da localização',state.events.length?`<span class="pill">${filtered.length} encontrado${filtered.length===1?'':'s'}</span>`:'')}${filtered.length?`<div class="event-list" id="event-list">${filtered.map(eventRow).join('')}</div>`:empty('Nenhum evento encontrado','Altere a localização, o estado ou a data para tentar novamente.','','◉',true)}</article></div>`;
+      document.querySelector('[data-action="search-events"]').addEventListener('click',()=>{window.eventFilters={search:document.getElementById('event-search').value.trim(),location:document.getElementById('event-location').value.trim(),state:document.getElementById('event-state').value,date:document.getElementById('event-date').value};eventsView();bindApp()});
+      ['event-search','event-location','event-date'].forEach(id=>document.getElementById(id)?.addEventListener('keydown',event=>{if(event.key==='Enter')document.querySelector('[data-action="search-events"]').click()}));
+    }
+
+    function settingsView(){document.getElementById('settings').innerHTML=`<div class="hero"><div><div class="eyebrow">Configurações</div><h2>Seu Odisseia,<br><span style="color:var(--orange)">do seu jeito.</span></h2><p>Altere seu nome ou sua moto quando quiser.</p></div></div><article class="card"><h3 style="margin:0 0 17px">Meu perfil</h3><div class="form-grid"><div class="field"><label for="profile-name">Nome</label><input id="profile-name" autocomplete="name" value="${escapeHtml(state.profile.name)}"></div><div class="field"><label for="profile-moto">Minha moto</label><input id="profile-moto" value="${escapeHtml(state.profile.motorcycleName)}" placeholder="Ex.: Honda CB 500X"></div></div><button class="btn small" style="margin-top:17px" data-action="save-profile-fixed">Salvar alterações</button></article>`}
+    const bindOdisseiaFixesBase=bindApp;bindApp=function(){bindOdisseiaFixesBase();document.querySelectorAll('[data-action="save-profile-fixed"]').forEach(button=>button.addEventListener('click',()=>{const name=document.getElementById('profile-name').value.trim(),motorcycleName=document.getElementById('profile-moto').value.trim();if(!name||!motorcycleName){toast('Informe seu nome e sua moto.');return}state.profile.name=name;state.profile.motorcycleName=motorcycleName;account={...account,name,motorcycleName};ensureProfileMotorcycle();save();renderApp();toast('Informações atualizadas.')}))}
+
+    renderSimpleProfile=function(){document.getElementById('root').innerHTML=`<main class="auth-shell"><section class="auth-card"><div class="auth-logo">${logo()}</div><span class="badge">APLICATIVO MOBILE</span><h1 class="auth-title" style="margin-top:18px">Vamos começar.</h1><p class="auth-copy">Informe somente como você quer ser chamado e qual moto você usa.</p><div class="form-grid"><div class="field"><label for="simple-name">Nome</label><input id="simple-name" autocomplete="name" placeholder="Ex.: Rafael"></div><div class="field"><label for="simple-moto">Minha moto</label><input id="simple-moto" autocomplete="off" placeholder="Ex.: Honda CB 500X"></div><button class="btn" data-action="save-simple-profile">Entrar no Odisseia</button></div><div class="auth-note"><span class="badge">SÓ O ESSENCIAL</span><span>Você poderá alterar essas informações em Configurações.</span></div></section></main>`;document.querySelector('[data-action="save-simple-profile"]').addEventListener('click',()=>{const name=document.getElementById('simple-name').value.trim(),motorcycleName=document.getElementById('simple-moto').value.trim();if(!name||!motorcycleName){toast('Informe seu nome e sua moto.');return}account={id:'local-profile',name,motorcycleName};state=loadSimpleState();state.profile={...state.profile,name,motorcycleName,email:'',motorcycleLink:''};ensureProfileMotorcycle();view='home';save();render()})}
+    bootAuth=function(){const profile=loadSimpleProfile();if(profile?.name&&profile?.motorcycleName){account={id:'local-profile',...profile};state=loadSimpleState();state.profile={...state.profile,...profile};ensureProfileMotorcycle();}else{account=null;state=structuredClone(blankState)}render()}
     bootAuth();
   </script>
 </body>
