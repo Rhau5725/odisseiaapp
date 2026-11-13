@@ -193,6 +193,29 @@
       document.querySelector('[data-action="filter-local-events"]').addEventListener('click',()=>{window.eventFilters={search:document.getElementById('event-search').value.trim(),location:document.getElementById('event-location').value.trim(),state:document.getElementById('event-state').value,date:document.getElementById('event-date').value};eventsView();bindApp()});
       ['event-location','event-search','event-date'].forEach(id=>document.getElementById(id)?.addEventListener('keydown',event=>{if(event.key==='Enter')openRealEventsSearch('web')}));
     }
+    function liveEventCard(event){return `<article class="card" style="padding:16px"><div class="eyebrow" style="color:#ff9b50">EVENTO ENCONTRADO</div><h3 style="margin:7px 0 6px">${escapeHtml(event.name)}</h3><p style="margin:0 0 8px;color:var(--muted);font-size:12px">📍 ${escapeHtml(event.city||'Localização não informada')}</p><p style="margin:0 0 8px;font-size:12px">📅 ${event.date?`Data do evento: ${escapeHtml(event.date)}`:'Data não informada na fonte'}</p><p style="margin:0 0 13px;color:var(--muted);font-size:12px">${escapeHtml(event.description||'Veja os detalhes na fonte original.')}</p><a class="btn small" href="${escapeHtml(event.officialUrl)}" target="_blank" rel="noopener noreferrer">Ver detalhes do evento ↗</a></article>`}
+    async function searchLiveEvents(){
+      const input=document.getElementById('event-location');
+      const location=input?.value.trim()||'';
+      if(!location){toast('Digite uma cidade ou região para pesquisar eventos.');input?.focus();return}
+      const button=document.querySelector('[data-action="search-live-events"]');
+      if(button){button.disabled=true;button.textContent='Buscando eventos reais…'}
+      try{
+        const response=await fetch(`/api/events?location=${encodeURIComponent(location)}`,{headers:{accept:'application/json'}});
+        const payload=await response.json();
+        if(!response.ok)throw new Error(payload.error||'Não foi possível buscar eventos.');
+        window.liveEvents=Array.isArray(payload.events)?payload.events:[];
+        window.eventFilters={location};
+        eventsView();
+      }catch(error){window.liveEvents=[];eventsView();toast(error.message||'Não foi possível buscar eventos agora.')}
+    }
+    function eventsView(){
+      const location=String(window.eventFilters?.location||'');
+      const results=Array.isArray(window.liveEvents)?window.liveEvents:[];
+      document.getElementById('events').innerHTML=`<div class="hero"><div><div class="eyebrow">Radar de encontros</div><h2>Encontre eventos<br><span style="color:var(--orange)">reais perto de você.</span></h2><p>Digite apenas a cidade ou região. O Odisseia consulta eventos publicados na web e mostra a fonte original.</p></div><button class="btn secondary" data-action="toggle-alerts">${state.preferences.eventAlerts?'✓ Alertas ativos':'Ativar alertas'}</button></div><article class="card"><div class="card-head"><div><h3>Onde você está?</h3><p>Busque encontros reais por localização.</p></div><span class="badge">BUSCA REAL</span></div><div class="grid two-col"><div class="field"><label for="event-location">Cidade ou região</label><input id="event-location" value="${escapeHtml(location)}" placeholder="Ex.: Belo Horizonte, MG"></div><button class="btn" data-action="search-live-events">🔎 Pesquisar eventos</button></div></article><article class="card" style="margin-top:16px">${cardHead('Eventos encontrados','Resultados consultados agora na web',results.length?`<span class="pill">${results.length} resultado${results.length===1?'':'s'}</span>`:'')}${results.length?`<div class="grid two-col">${results.map(liveEventCard).join('')}</div>`:empty(location?'Nenhum evento encontrado nessa região':'Digite uma localização para começar','A pesquisa procura encontros de motociclistas publicados em fontes reais. A data aparece somente quando estiver informada na fonte.','','◉',true)}</article>`;
+      document.querySelector('[data-action="search-live-events"]').addEventListener('click',searchLiveEvents);
+      document.getElementById('event-location')?.addEventListener('keydown',event=>{if(event.key==='Enter')searchLiveEvents()});
+    }
     bootAuth();
   </script>
 </body>
