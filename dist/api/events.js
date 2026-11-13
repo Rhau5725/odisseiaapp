@@ -20,15 +20,11 @@ function extractDate(text) {
   return month ? month[0] : '';
 }
 
-function decodeBingUrl(raw) {
+function decodeDuckUrl(raw) {
   const value = String(raw || '').replace(/&amp;/gi, '&');
   try {
     const parsed = new URL(value);
-    const encoded = parsed.searchParams.get('u');
-    if (encoded && encoded.startsWith('a1')) {
-      return Buffer.from(encoded.slice(2), 'base64').toString('utf8');
-    }
-    return parsed.href;
+    return decodeURIComponent(parsed.searchParams.get('uddg') || parsed.href);
   } catch {
     return value;
   }
@@ -38,8 +34,8 @@ module.exports = async function handler(req, res) {
   const location = String(req.query?.location || '').trim().slice(0, 120);
   if (!location) return res.status(400).json({ error: 'Informe uma cidade ou região.' });
 
-  const query = `encontro de motos ${location} motociclistas evento passeio`;
-  const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=pt-BR&cc=br`;
+  const query = `encontro de motociclistas ${location}`;
+  const url = `https://r.jina.ai/http://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
   try {
     const response = await fetch(url, {
@@ -49,18 +45,20 @@ module.exports = async function handler(req, res) {
       }
     });
     if (!response.ok) throw new Error(`Busca externa retornou ${response.status}`);
-    const html = await response.text();
-    const results = [...html.matchAll(/<li class="b_algo"[^>]*>[\s\S]*?<h2><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?(?:<p>([\s\S]*?)<\/p>)?[\s\S]*?<\/li>/gi)];
+    const markdown = await response.text();
+    const results = markdown.split(/\n(?=## \[)/).filter(block => block.startsWith('## ['));
     const events = [];
     const seen = new Set();
 
-    for (const match of results) {
-      const sourceUrl = decodeBingUrl(match[1]);
+    for (const block of results) {
+      const heading = block.match(/^## \[([^\]]+)\]\(([^)]+)\)/);
+      if (!heading) continue;
+      const sourceUrl = decodeDuckUrl(heading[2]);
       if (!/^https?:\/\//i.test(sourceUrl)) continue;
       if (seen.has(sourceUrl)) continue;
       seen.add(sourceUrl);
-      const title = clean(match[2]);
-      const description = clean(match[3] || '');
+      const title = clean(heading[1]);
+      const description = clean(block.replace(/^## [\s\S]*?\n/, '').replace(/!?(?:\[[^\]]*\])\([^)]*\)/g, '').replace(/https?:\/\/\S+/g, '').replace(/[\[\]#*_]/g, ' ')).slice(0, 360);
       const combined = `${title} ${description}`;
       if (!/(moto|motocicl|motorcycle|rider|passeio)/i.test(combined)) continue;
       events.push({
