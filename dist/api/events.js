@@ -20,11 +20,25 @@ function extractDate(text) {
   return month ? month[0] : '';
 }
 
+function decodeBingUrl(raw) {
+  const value = String(raw || '').replace(/&amp;/gi, '&');
+  try {
+    const parsed = new URL(value);
+    const encoded = parsed.searchParams.get('u');
+    if (encoded && encoded.startsWith('a1')) {
+      return Buffer.from(encoded.slice(2), 'base64').toString('utf8');
+    }
+    return parsed.href;
+  } catch {
+    return value;
+  }
+}
+
 module.exports = async function handler(req, res) {
   const location = String(req.query?.location || '').trim().slice(0, 120);
   if (!location) return res.status(400).json({ error: 'Informe uma cidade ou região.' });
 
-  const query = `encontro de motociclistas ${location}`;
+  const query = `encontro de motos ${location} motociclistas evento passeio`;
   const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=pt-BR&cc=br`;
 
   try {
@@ -36,18 +50,19 @@ module.exports = async function handler(req, res) {
     });
     if (!response.ok) throw new Error(`Busca externa retornou ${response.status}`);
     const html = await response.text();
-    const results = [...html.matchAll(/<li class="b_algo">[\s\S]*?<h2><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?(?:<p>([\s\S]*?)<\/p>)?[\s\S]*?<\/li>/gi)];
+    const results = [...html.matchAll(/<li class="b_algo"[^>]*>[\s\S]*?<h2><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>[\s\S]*?(?:<p>([\s\S]*?)<\/p>)?[\s\S]*?<\/li>/gi)];
     const events = [];
     const seen = new Set();
 
     for (const match of results) {
-      const sourceUrl = match[1];
+      const sourceUrl = decodeBingUrl(match[1]);
       if (!/^https?:\/\//i.test(sourceUrl)) continue;
       if (seen.has(sourceUrl)) continue;
       seen.add(sourceUrl);
       const title = clean(match[2]);
       const description = clean(match[3] || '');
       const combined = `${title} ${description}`;
+      if (!/(moto|motocicl|motorcycle|rider|passeio)/i.test(combined)) continue;
       events.push({
         id: `web-${events.length}`,
         name: title || 'Encontro de motociclistas',
