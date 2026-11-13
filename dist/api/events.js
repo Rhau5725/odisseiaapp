@@ -58,7 +58,8 @@ module.exports = async function handler(req, res) {
       if (seen.has(sourceUrl)) continue;
       seen.add(sourceUrl);
       const title = clean(heading[1]);
-      const description = clean(block.replace(/^## [\s\S]*?\n/, '').replace(/!?(?:\[[^\]]*\])\([^)]*\)/g, '').replace(/https?:\/\/\S+/g, '').replace(/[\[\]#*_]/g, ' ')).slice(0, 360);
+      const markdownText = block.replace(/^## [\s\S]*?\n/, '').replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '').replace(/[#*_]/g, ' ');
+      const description = clean(markdownText.replace(title, '')).slice(0, 360);
       const combined = `${title} ${description}`;
       if (!/(moto|motocicl|motorcycle|rider|passeio)/i.test(combined)) continue;
       events.push({
