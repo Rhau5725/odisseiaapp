@@ -14,6 +14,11 @@ function clean(value) {
 }
 
 function extractDate(text) {
+  const full = text.match(/\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/);
+  if (full) {
+    const [year, month, day] = full[0].split(/[-/]/);
+    return `${day}/${month}/${year}`;
+  }
   const numeric = text.match(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/);
   if (numeric) return numeric[0];
   const month = new RegExp(`\\b\\d{1,2}\\s+de\\s+(?:${MONTHS.join('|')})\\b`, 'i').exec(text);
@@ -58,7 +63,7 @@ module.exports = async function handler(req, res) {
       if (seen.has(sourceUrl)) continue;
       seen.add(sourceUrl);
       const title = clean(heading[1]);
-      const markdownText = block.replace(/^## [\s\S]*?\n/, '').replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '').replace(/[#*_]/g, ' ');
+      const markdownText = block.replace(/^## [\s\S]*?\n/, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '').replace(/\bImage\s+\d+\b/gi, '').replace(/[\[\]#*_]/g, ' ');
       const description = clean(markdownText.replace(title, '')).slice(0, 360);
       const combined = `${title} ${description}`;
       if (!/(moto|motocicl|motorcycle|rider|passeio)/i.test(combined)) continue;
